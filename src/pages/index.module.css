@@ -1,0 +1,71 @@
+.main {
+  align-items: center;
+  background-color: #222;
+  color: #fafafa;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  padding: 0 0.5rem;
+  width: 100%;
+}
+
+.footer {
+  width: 100%;
+  height: 50px;
+  border-top: 1px solid #fafafa;
+  display: flex;
+  justify-content: center;
+  position: absolute;
+  bottom: 0;
+}
+
+.green {
+  background-color: #4daa57;
+}
+
+.yellow {
+  background-color: #f9dc5c;
+  color: #222;
+}
+
+.orange {
+  background-color: #f4743b;
+  color: #222;
+}
+
+.red {
+  background-color: red;
+  color: #222;
+}
+
+.purple {
+  background-color: #820b8a;
+}
+
+.maroon {
+  background-color: #720e07;
+}
+
+.footer a {
+  align-items: center;
+  display: flex;
+  flex-grow: 1;
+  justify-content: center;
+}
+
+.title {
+  margin: 0;
+  line-height: 1.15;
+  font-size: 3rem;
+}
+
+.title,
+.description {
+  text-align: center;
+}
+
+.description {
+  line-height: 1.5;
+  font-size: 1.5rem;
+}
