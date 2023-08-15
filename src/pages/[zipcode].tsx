@@ -2,49 +2,53 @@ import Head from 'next/head';
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 
-import { categoryColorMap } from '../utils/constants';
 import styles from './index.module.css';
+import type { JsonResult } from '../utils/types';
+import { categoryColorMap } from '../utils/constants';
 
-export default function Home(props: { aqi?: Array<any>; cityState: string; zipCode?: string }) {
+type AddressResult = { address: { postcode: string } };
+type GeolocationResult = [{ lat: number; lon: number }];
+
+export default function Home(props: {
+  aqi?: number;
+  categoryName?: string;
+  categoryNum?: number;
+  cityState?: string;
+  zipCode?: string;
+}) {
   const router = useRouter();
-  const [aqi, setAqi] = useState(props.aqi || []);
-  const [cityState, setCityState] = useState(props.cityState || '');
-  const [zipCode, setZipCode] = useState(props.zipCode || '');
-  const mappedColor = useMemo(() => categoryColorMap[aqi[1] as keyof typeof categoryColorMap] || '', [aqi]);
+  const [aqi, setAqi] = useState(props.aqi ?? 0);
+  const [categoryName, setCategoryName] = useState(props.categoryName ?? '');
+  const [categoryNum, setCategoryNum] = useState(props.categoryNum ?? '');
+  const [cityState, setCityState] = useState(props.cityState ?? '');
+  const [zipCode, setZipCode] = useState(props.zipCode ?? '');
+  const mappedColor = useMemo(() => categoryColorMap[categoryNum as keyof typeof categoryColorMap] ?? '', [categoryNum]);
 
   const fetchNewAqi = useCallback(
     async (newZipCode: string) => {
       const res = await fetch(`/api/aqi?zipcode=${newZipCode}`);
       if (!res) {
         setCityState('');
-        return setAqi([]);
+        setCategoryName('');
+        setCategoryNum(0);
+        return setAqi(0);
       }
-      const result = await res.json();
-      if (!result || !result.length) {
+      const result = (await res.json()) as JsonResult;
+      if (!result) {
         setCityState('');
-        return setAqi([]);
+        setCategoryName('');
+        setCategoryNum(0);
+        return setAqi(0);
       }
-      setAqi([result.AQI, result.Category.Number]);
+      setAqi(result.AQI);
+      setCategoryName(result.Category.Name);
+      setCategoryNum(result.Category.Number);
       setCityState(`${result.ReportingArea}, ${result.StateCode}`);
       setZipCode(newZipCode);
+      await router.push(`/${newZipCode}`, '', { shallow: true });
     },
-    [setAqi, setCityState, setZipCode],
+    [setAqi, setCityState, setZipCode, router],
   );
-
-  const handleChangeZipCode = useCallback(async (e: any) => {
-    e.preventDefault();
-
-    const newZipCode = e?.target?.zipcode.value;
-
-    if (newZipCode.length !== 5 || !newZipCode.match(/\d/g)) {
-      return await handleNotZipCode(newZipCode);
-    }
-
-    if (!newZipCode) return;
-
-    await fetchNewAqi(newZipCode);
-    router.push(`/${newZipCode}`, '', { shallow: true });
-  }, []);
 
   const handleGeolocationSuccess = useCallback(
     async ({ latitude, longitude }: { latitude: number; longitude: number }): Promise<void> => {
@@ -52,29 +56,55 @@ export default function Home(props: { aqi?: Array<any>; cityState: string; zipCo
         const response = await fetch(
           `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
         );
-        const result = await response.json();
+        const result = (await response.json()) as AddressResult;
         const postCode = result?.address?.postcode?.slice(0, 5);
         if (!!postCode) {
           await fetchNewAqi(postCode);
         }
       }
     },
-    [],
+    [fetchNewAqi],
   );
 
-  const handleNotZipCode = useCallback(async (value: string) => {
-    const [city, state] = value.split(',');
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?city=${city?.trim()}${state ? `&state=${state.trim()}` : ''}&format=json`,
-    );
-    const result = await response.json();
-    if (result.length) {
-      const { lat, lon } = result[0];
-      if (lat && lon) {
-        await handleGeolocationSuccess({ latitude: lat, longitude: lon });
+  const handleNotZipCode = useCallback(
+    async (value: string) => {
+      const [city, state] = value.split(',');
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?city=${city?.trim()}${
+          state ? `&state=${state.trim()}` : ''
+        }&format=json`,
+      );
+      const result = (await response.json()) as GeolocationResult;
+      if (result.length) {
+        const { lat, lon } = result[0];
+        if (lat && lon) {
+          await handleGeolocationSuccess({ latitude: lat, longitude: lon });
+        }
       }
-    }
-  }, []);
+    },
+    [handleGeolocationSuccess],
+  );
+
+  const handleChangeZipCode = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      const newZipCode = (e.currentTarget.elements.namedItem('zipcode') as HTMLInputElement).value;
+
+      if (newZipCode && newZipCode?.length === 5 && newZipCode.match(/\d/g)) {
+        await fetchNewAqi(newZipCode);
+      } else {
+        await handleNotZipCode(newZipCode);
+      }
+    },
+    [fetchNewAqi, handleNotZipCode],
+  );
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      return void handleChangeZipCode(event);
+    },
+    [handleChangeZipCode],
+  );
 
   return (
     <>
@@ -84,20 +114,20 @@ export default function Home(props: { aqi?: Array<any>; cityState: string; zipCo
       </Head>
       <main className={`${styles.main} ${styles[mappedColor]}`}>
         <h1 className={styles.title}>
-          AQI{!!aqi[0] && ': '}
-          {!!aqi[0] && aqi[0]}
+          AQI{aqi && aqi > -1 && ': '}
+          {aqi ? aqi > -1 && aqi : categoryName}
         </h1>
-        <div>for</div>
+        {aqi && aqi > -1 && <div>for</div>}
         <div className={styles.description}>
           {cityState && cityState} {zipCode}
         </div>
-        <form className={styles.description} onSubmit={handleChangeZipCode}>
+        <form className={styles.description} onSubmit={handleSubmit} method="post">
           <div>
-            <label htmlFor="text" />
             <input type="text" id="zipcode" name="zipcode" placeholder="zip code" />
+            <label htmlFor="text" />
           </div>
           <div>
-            <button>Submit</button>
+            <button type="submit">Submit</button>
           </div>
         </form>
 
@@ -123,9 +153,9 @@ export async function getServerSideProps(context: { query: { zipcode: number } }
   const res = await fetch(
     `https://www.airnowapi.org/aq/forecast/zipCode/?format=application/json&zipCode=${zipCode}&distance=10&API_KEY=9E5AECAD-C761-451C-861B-14F674DB9E45`,
   );
-  const result = await res.json();
+  const result = (await res.json()) as [JsonResult];
 
-  if (!result || !result.length) {
+  if (!result?.length || !result[0]) {
     return {
       props: {},
     };
@@ -135,7 +165,9 @@ export async function getServerSideProps(context: { query: { zipcode: number } }
 
   return {
     props: {
-      aqi: [realResult?.AQI, realResult?.Category?.Number],
+      aqi: realResult?.AQI,
+      categoryNum: realResult?.Category?.Number,
+      categoryName: realResult?.Category?.Name,
       cityState: `${realResult.ReportingArea}, ${realResult.StateCode}`,
       zipCode,
     },
